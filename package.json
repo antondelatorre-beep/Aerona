@@ -1,0 +1,20 @@
+{
+  "name": "aerona",
+  "version": "0.2.0",
+  "description": "AERONA: The Living World - a realistic multiplayer bird wildlife simulator (Stage 2: species system)",
+  "type": "module",
+  "private": true,
+  "engines": {
+    "node": ">=18"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "inspect-glb": "node inspect-glb.mjs"
+  },
+  "dependencies": {
+    "compression": "^1.7.4",
+    "express": "^4.21.0",
+    "three": "^0.170.0"
+  }
+}

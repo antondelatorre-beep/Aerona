@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, user-scalable=no">
+  <title>Aerona: The Living World</title>
+  <link rel="stylesheet" href="/styles.css">
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "/vendor/three/build/three.module.js",
+      "three/addons/": "/vendor/three/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+  <canvas id="view"></canvas>
+
+  <section id="loading" class="panel center">
+    <h1>Aerona</h1>
+    <p id="loading-text">Preparing the sky</p>
+    <div class="bar"><div id="loading-bar"></div></div>
+    <p id="loading-error" class="error" hidden></p>
+  </section>
+
+  <section id="menu" class="panel center" hidden>
+    <h1>Aerona</h1>
+    <p id="menu-species" class="species-line"></p>
+    <p id="menu-notice" class="notice" hidden></p>
+    <button id="start" class="primary">Take flight</button>
+    <div class="columns">
+      <div>
+        <h2>Flying</h2>
+        <dl>
+          <dt>Mouse</dt><dd>look and steer</dd>
+          <dt>W / S</dt><dd>flap forward / brake</dd>
+          <dt>A / D</dt><dd>turn</dd>
+          <dt>Space</dt><dd>hard flap, climb</dd>
+          <dt>Shift</dt><dd>boost</dd>
+          <dt>C</dt><dd>dive</dd>
+          <dt>F</dt><dd>land or take off</dd>
+        </dl>
+      </div>
+      <div>
+        <h2>On the ground</h2>
+        <dl>
+          <dt>WASD</dt><dd>walk (Shift runs)</dd>
+          <dt>E</dt><dd>peck, or drink at water</dd>
+          <dt>R</dt><dd>rest</dd>
+          <dt>Space / F</dt><dd>take off</dd>
+          <dt>Tab / Esc</dt><dd>this menu</dd>
+        </dl>
+      </div>
+    </div>
+    <h2>Species</h2>
+    <div id="species-list" class="species-list"></div>
+  </section>
+
+  <div id="hud" hidden>
+    <div class="hud-top">
+      <span id="hud-biome"></span>
+      <span id="hud-time"></span>
+    </div>
+    <div class="hud-message" id="hud-message"></div>
+    <div class="hud-bottom">
+      <div class="readout"><span id="hud-speed">0</span><small>km/h</small></div>
+      <div class="readout"><span id="hud-alt">0</span><small>m above ground</small></div>
+      <div class="readout"><span id="hud-heading">N</span><small id="hud-mode">ground</small></div>
+      <div class="stamina"><div id="hud-stamina"></div></div>
+    </div>
+    <div class="hud-hint" id="hud-hint"></div>
+  </div>
+
+  <script type="module" src="/main.js"></script>
+</body>
+</html>

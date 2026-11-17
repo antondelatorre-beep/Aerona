@@ -1,0 +1,12 @@
+# Render Blueprint: New > Blueprint, point it at this repository.
+services:
+  - type: web
+    name: aerona
+    runtime: node
+    plan: free
+    buildCommand: npm install
+    startCommand: npm start
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_VERSION
+        value: "20"
