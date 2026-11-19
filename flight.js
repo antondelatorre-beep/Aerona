@@ -54,6 +54,8 @@ export class FlightController {
     this.brake = false;
     this.message = '';
     this.messageT = 0;
+    this.striking = false;          // talons out (set by the hunting system)
+    this.hungerFactor = 1;          // < 1 slows stamina recovery when starving
     this.time = 0;
     this.state = this._snapshot();
   }
@@ -118,9 +120,9 @@ export class FlightController {
     const moving = mag > 0.1 && !this.action;
     if (moving) this.resting = false;
 
-    if ((edges.land || edges.flap) && !this.action && !this.exhausted) {
-      this._startTakeoff();
-      return;
+    if ((edges.land || edges.flap) && !this.action) {
+      if (this.f.flightless) this.say('This bird cannot fly. Hold Shift to run.', 2);
+      else if (!this.exhausted) { this._startTakeoff(); return; }
     }
 
     if (moving) {
@@ -308,7 +310,7 @@ export class FlightController {
   }
 
   _regen(dt, rate) {
-    this.stamina = Math.min(this.f.stamina, this.stamina + rate * dt);
+    this.stamina = Math.min(this.f.stamina, this.stamina + rate * this.hungerFactor * dt);
     if (this.exhausted && this.stamina > 25) this.exhausted = false;
   }
 
@@ -332,6 +334,7 @@ export class FlightController {
       groundSpeed: this.groundSpeed,
       intensity: this.intensity,
       dive: this.dive && flying,
+      striking: this.striking,
       brake: this.brake && flying,
       pitch: this.pitch,
       roll: this.roll,

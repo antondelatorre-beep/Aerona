@@ -28,6 +28,7 @@ export class BirdAnimator {
     this.diveAmt = 0;
     this.restBlend = 0;
     this.speedFlare = 0;
+    this.strikeAmt = 0;
 
     this.lookTimer = 1.5;
     this.look = { yaw: 0, pitch: 0 };
@@ -55,6 +56,7 @@ export class BirdAnimator {
     const landing = s.mode === 'landing';
     const flare = landing ? clamp01(1 - s.agl / 6) : 0;
     this.speedFlare = damp(this.speedFlare, flare, 8, dt);
+    this.strikeAmt = damp(this.strikeAmt, s.striking ? 1 : 0, 10, dt);
 
     // -- blend between ground and air postures ----------------------------------
     const attitudeTarget = flying ? (landing && s.agl < 2.2 ? 0.35 : 1) : 0;
@@ -117,7 +119,7 @@ export class BirdAnimator {
       }
     } else {
       const tuck = 0.5 * (1 - this.speedFlare) * (1 - 0.3 * this.diveAmt);
-      legL = legR = tuck - 0.9 * this.speedFlare;                // legs trail in flight, swing forward to land
+      legL = legR = tuck - 0.9 * Math.max(this.speedFlare, this.strikeAmt);                // legs trail in flight, swing forward to land
     }
     p.legL = damp(p.legL, legL, 12, dt);
     p.legR = damp(p.legR, legR, 12, dt);

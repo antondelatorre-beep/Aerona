@@ -14,6 +14,7 @@ import * as THREE from 'three';
 import { GLTFLoader } from 'three/addons/loaders/GLTFLoader.js';
 import { DRACOLoader } from 'three/addons/loaders/DRACOLoader.js';
 import { MeshoptDecoder } from 'three/addons/libs/meshopt_decoder.module.js';
+import { clone as cloneSkinned } from 'three/addons/utils/SkeletonUtils.js';
 import { wingBasis } from './rigMath.js';
 
 const AX = { x: new THREE.Vector3(1, 0, 0), y: new THREE.Vector3(0, 1, 0), z: new THREE.Vector3(0, 0, 1) };
@@ -70,20 +71,43 @@ function getLoader() {
  * unusable the game falls back to a procedural bird and reports why in
  * `model.info.error`.
  */
+const sourceCache = new Map();   // path -> Promise<gltf>, shared by every bird that uses the file
+
+/** Download (once) and cache a GLB. */
+export function loadBirdSource(path, onProgress) {
+  if (!sourceCache.has(path)) {
+    const p = getLoader().loadAsync(path, (e) => { if (onProgress && e.total) onProgress(e.loaded / e.total); });
+    p.then((gltf) => {
+      console.groupCollapsed(`[aerona] nodes in ${path}`);
+      console.log(describeModel(gltf.scene).join('\n'));
+      console.log('animation clips:', gltf.animations.map((a) => a.name));
+      console.groupEnd();
+    }).catch(() => sourceCache.delete(path));
+    sourceCache.set(path, p);
+  }
+  return sourceCache.get(path);
+}
+
+/** Start downloading a species' model without building anything. */
+export function preloadBird(species, config) {
+  const path = config?.path;
+  return path ? loadBirdSource(path).catch(() => null) : Promise.resolve(null);
+}
+
+/**
+ * Create a BirdModel for a species. Never throws: if the GLB is missing or
+ * unusable the game falls back to a procedural bird and reports why in
+ * `model.info.error`. Every call gets its own clone of the cached scene, so any
+ * number of birds can share one downloaded file.
+ */
 export async function createBird(species, config, onProgress, autoPath = null) {
   const path = config?.path || autoPath;
   if (!path) return buildPlaceholder(species, { reason: 'no-config' });
   try {
-    const gltf = await getLoader().loadAsync(path, (e) => {
-      if (onProgress && e.total) onProgress(e.loaded / e.total);
-    });
-    console.groupCollapsed(`[aerona] ${species.id}: nodes in ${path}`);
-    console.log(describeModel(gltf.scene).join('\n'));
-    console.log('animation clips:', gltf.animations.map((a) => a.name));
-    console.groupEnd();
+    const gltf = await loadBirdSource(path, onProgress);
     const cfg = config || autoConfig(gltf.scene, species, path);
     if (!config) console.info(`[aerona] ${species.id}: no entry in modelConfigs.js, using an automatic draft:`, JSON.stringify(cfg, null, 2));
-    return new BirdModel(gltf.scene, cfg, species, { source: 'glb', auto: !config, clips: gltf.animations });
+    return new BirdModel(cloneSkinned(gltf.scene), cfg, species, { source: 'glb', auto: !config, clips: gltf.animations });
   } catch (err) {
     console.error(`[aerona] could not load ${path}`, err);
     return buildPlaceholder(species, { reason: 'load-failed', error: err?.message || String(err), path });
@@ -193,6 +217,10 @@ function buildPlaceholder(species, info) {
     legs: { type: 'rigid', nodes: ['ph_legL', 'ph_legR'] },
     bones: {}, neck: {}, tail: {}
   };
+  g.traverse((o) => {
+    if (o.geometry) o.geometry.userData.owned = true;
+    if (o.material) o.material.userData.owned = true;
+  });
   return new BirdModel(g, config, species, { source: 'placeholder', ...info });
 }
 
@@ -215,6 +243,7 @@ function syntheticWingGeometry(cfg, side) {
     colors[i * 3] = c.r; colors[i * 3 + 1] = c.g; colors[i * 3 + 2] = c.b;
   }
   geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+  geo.userData.owned = true;
   return geo;
 }
 
@@ -321,6 +350,63 @@ export class BirdModel {
     return new THREE.Matrix4().multiplyMatrices(inv, node.matrixWorld);
   }
 
+  /** Find the configured nodes; with `split`, cut each one's mesh into left and right halves. */
+  _resolveNodes(cfg, label) {
+    const out = [];
+    for (const spec of cfg.nodes || []) {
+      const node = findNode(this.object, spec);
+      if (!node) { this.warn(`${label} node "${spec}" not found`); continue; }
+      if (cfg.split) out.push(...this._splitBySide(node, label));
+      else out.push(node);
+    }
+    return out;
+  }
+
+  _splitBySide(node, label) {
+    let mesh = null;
+    node.traverse((o) => { if (!mesh && o.isMesh) mesh = o; });
+    if (!mesh) { this.warn(`${label} node "${node.name}" has no mesh to split`); return []; }
+    this.content.updateMatrixWorld(true);
+    const inv = new THREE.Matrix4().copy(this.content.matrixWorld).invert();
+    const mm = new THREE.Matrix4().multiplyMatrices(inv, mesh.matrixWorld);
+    const g = mesh.geometry, pos = g.attributes.position, idx = g.index;
+    const tris = idx ? idx.count / 3 : pos.count / 3;
+    const at = (t, k) => (idx ? idx.getX(t * 3 + k) : t * 3 + k);
+    const sides = [[], []];
+    for (let t = 0; t < tris; t++) {
+      let cx = 0;
+      for (let k = 0; k < 3; k++) cx += _v.fromBufferAttribute(pos, at(t, k)).applyMatrix4(mm).x;
+      sides[cx / 3 >= this.symmetryX ? 0 : 1].push(at(t, 0), at(t, 1), at(t, 2));
+    }
+    const getters = ['getX', 'getY', 'getZ', 'getW'];
+    const parts = [];
+    sides.forEach((list, s) => {
+      if (!list.length) return;
+      const remap = new Map(), order = [], newIndex = [];
+      for (const i of list) {
+        if (!remap.has(i)) { remap.set(i, order.length); order.push(i); }
+        newIndex.push(remap.get(i));
+      }
+      const ng = new THREE.BufferGeometry();
+      for (const [name, attr] of Object.entries(g.attributes)) {
+        const arr = new Float32Array(order.length * attr.itemSize);
+        order.forEach((o, n) => { for (let k = 0; k < attr.itemSize; k++) arr[n * attr.itemSize + k] = attr[getters[k]](o); });
+        ng.setAttribute(name, new THREE.BufferAttribute(arr, attr.itemSize));
+      }
+      ng.setIndex(newIndex);
+      ng.userData.owned = true;
+      const m = new THREE.Mesh(ng, mesh.material);
+      m.name = `${node.name}_${s === 0 ? 'L' : 'R'}`;
+      m.position.copy(mesh.position); m.quaternion.copy(mesh.quaternion); m.scale.copy(mesh.scale);
+      m.castShadow = true; m.receiveShadow = true; m.frustumCulled = false;
+      mesh.parent.add(m);
+      parts.push(m);
+    });
+    mesh.parent.remove(mesh);
+    this.content.updateMatrixWorld(true);
+    return parts;
+  }
+
   // -- wings ---------------------------------------------------------------
 
   _setupWings() {
@@ -330,11 +416,9 @@ export class BirdModel {
       const spread = { length: 1.5, thickness: 1, chord: 1.5, ...(cfg.spread || {}) };
       this.wingSpread = spread;
       const shoulderDir = this.config.shoulderDir || [0, 1, 0];
-      for (const spec of cfg.nodes || []) {
-        const node = findNode(this.object, spec);
-        if (!node) { this.warn(`wing node "${spec}" not found`); continue; }
+      for (const node of this._resolveNodes(cfg, 'wing')) {
         const pts = this._pointsOf(node);
-        if (!pts.length) { this.warn(`wing node "${spec}" has no mesh`); continue; }
+        if (!pts.length) { this.warn(`wing node "${node.name}" has no mesh`); continue; }
         const meanX = pts.reduce((a, v, i) => a + (i % 3 === 0 ? v : 0), 0) / (pts.length / 3);
         const side = meanX - this.symmetryX >= 0 ? 1 : -1;
         const b = wingBasis(pts, side, shoulderDir);
@@ -359,7 +443,7 @@ export class BirdModel {
         node.matrix.copy(rel).premultiply(_m2.makeTranslation(-shoulderPos.x, -shoulderPos.y, -shoulderPos.z));
 
         node.traverse((m) => {
-          if (m.isMesh) { m.material = m.material.clone(); m.material.side = THREE.DoubleSide; }
+          if (m.isMesh) { m.material = m.material.clone(); m.material.side = THREE.DoubleSide; m.material.userData.owned = true; }
         });
         this.wings.push({ side, node, shoulder, rel, shoulderPos, basis, basisT, rSpread });
       }
@@ -375,6 +459,7 @@ export class BirdModel {
         mesh.castShadow = true;
         mesh.frustumCulled = false;
         mesh.visible = false;
+        mesh.material.userData.owned = true;
         const shoulder = new THREE.Group();
         shoulder.name = `shoulder_${side > 0 ? 'L' : 'R'}`;
         shoulder.position.set(side * cfg.shoulder[0], cfg.shoulder[1], cfg.shoulder[2]);
@@ -398,9 +483,7 @@ export class BirdModel {
   _setupLegs() {
     const cfg = this.config.legs;
     if (!cfg || cfg.type !== 'rigid') return;
-    for (const spec of cfg.nodes || []) {
-      const node = findNode(this.object, spec);
-      if (!node) { this.warn(`leg node "${spec}" not found`); continue; }
+    for (const node of this._resolveNodes(cfg, 'leg')) {
       const pts = this._pointsOf(node);
       if (!pts.length) continue;
       let top = -Infinity, sx = 0, sz = 0;
@@ -425,10 +508,44 @@ export class BirdModel {
     const grab = (names, label) => (names || []).map((n) => {
       const node = findNode(this.object, n);
       if (!node) { this.warn(`${label} bone "${n}" not found`); return null; }
-      return { node, rest: node.quaternion.clone() };
+      const wq = node.getWorldQuaternion(new THREE.Quaternion()).invert();
+      // The model's own lateral (X) and vertical (Y) axes expressed in this bone's local frame, so
+      // nodding and turning work whatever orientation the exporter gave the joint.
+      return { node, rest: node.quaternion.clone(), axX: AX.x.clone().applyQuaternion(wq), axY: AX.y.clone().applyQuaternion(wq) };
     });
+    this.content.updateMatrixWorld(true);
     this.neck = grab(bones.neck, 'neck');
     this.tail = grab(bones.tail, 'tail');
+    this._setupClip();
+  }
+
+  // -- the model's own animation clip (idle behaviour on the ground) ----------------
+
+  _setupClip() {
+    this.mixer = null;
+    const want = this.config.idleClip;
+    const clips = this.info.clips || [];
+    if (!want || !clips.length) return;
+    const clip = typeof want === 'string' ? clips.find((c) => c.name === want) : clips[0];
+    if (!clip) { this.warn(`animation clip "${want}" not found`); return; }
+    this.mixer = new THREE.AnimationMixer(this.object);
+    this.clipAction = this.mixer.clipAction(clip);
+    this.clipAction.play();
+    this.clipActive = true;
+  }
+
+  /** Play the clip while `active` (on the ground); back to the bind pose otherwise. */
+  updateClip(dt, active) {
+    if (!this.mixer) return;
+    if (active) {
+      if (!this.clipActive) { this.clipAction.play(); this.clipActive = true; }
+      this.mixer.update(dt);
+    } else if (this.clipActive) {
+      this.clipAction.stop();
+      this.mixer.update(0);
+      this.object.traverse((o) => { if (o.isSkinnedMesh) o.skeleton.pose(); });
+      this.clipActive = false;
+    }
   }
 
   // -- pose application ------------------------------------------------------
@@ -505,8 +622,8 @@ export class BirdModel {
       if (!b) return;
       _qb.copy(b.rest);
       if (i >= from) _qb.slerp(_ident, clamp01(p.neckExtend));
-      if (pw[i]) _qb.multiply(_qa.setFromAxisAngle(AX.x, p.headPitch * pw[i]));
-      if (yw[i]) _qb.multiply(_qa.setFromAxisAngle(AX.y, p.headYaw * yw[i]));
+      if (pw[i]) _qb.multiply(_qa.setFromAxisAngle(b.axX, p.headPitch * pw[i]));
+      if (yw[i]) _qb.multiply(_qa.setFromAxisAngle(b.axY, p.headYaw * yw[i]));
       b.node.quaternion.copy(_qb);
     });
   }
@@ -519,16 +636,17 @@ export class BirdModel {
     this.tail.forEach((b, i) => {
       if (!b) return;
       _qb.copy(b.rest);
-      if (pw[i]) _qb.multiply(_qa.setFromAxisAngle(AX.x, p.tailPitch * pw[i]));
-      if (yw[i]) _qb.multiply(_qa.setFromAxisAngle(AX.z, p.tailYaw * yw[i]));
+      if (pw[i]) _qb.multiply(_qa.setFromAxisAngle(b.axX, p.tailPitch * pw[i]));
+      if (yw[i]) _qb.multiply(_qa.setFromAxisAngle(b.axY, p.tailYaw * yw[i]));
       b.node.quaternion.copy(_qb);
     });
   }
 
   dispose() {
     this.root.traverse((o) => {
-      if (o.geometry) o.geometry.dispose();
-      if (o.material) for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.dispose();
+      if (o.geometry?.userData.owned) o.geometry.dispose();
+      for (const m of Array.isArray(o.material) ? o.material : o.material ? [o.material] : []) if (m.userData.owned) m.dispose();
     });
+    this.mixer?.stopAllAction();
   }
 }

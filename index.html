@@ -40,6 +40,7 @@
           <dt>Shift</dt><dd>boost</dd>
           <dt>C</dt><dd>dive</dd>
           <dt>F</dt><dd>land or take off</dd>
+          <dt>E</dt><dd>strike prey (hawk, kestrel, osprey) or dive for fish</dd>
         </dl>
       </div>
       <div>
@@ -63,11 +64,18 @@
       <span id="hud-time"></span>
     </div>
     <div class="hud-message" id="hud-message"></div>
+    <div class="hud-nearby" id="hud-nearby"></div>
+    <div class="hud-target" id="hud-target" hidden><span id="hud-target-label"></span></div>
+    <div class="hud-prompt" id="hud-prompt"></div>
     <div class="hud-bottom">
       <div class="readout"><span id="hud-speed">0</span><small>km/h</small></div>
       <div class="readout"><span id="hud-alt">0</span><small>m above ground</small></div>
       <div class="readout"><span id="hud-heading">N</span><small id="hud-mode">ground</small></div>
-      <div class="stamina"><div id="hud-stamina"></div></div>
+      <div class="bars">
+        <div class="stamina"><div id="hud-stamina"></div></div>
+        <div class="stamina food"><div id="hud-food"></div></div>
+        <small id="hud-level"></small>
+      </div>
     </div>
     <div class="hud-hint" id="hud-hint"></div>
   </div>

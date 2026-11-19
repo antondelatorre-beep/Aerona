@@ -12,9 +12,9 @@ import {
 } from '/terrain.js';
 
 const QUALITY = {
-  low:    { radius: 4, shadowMap: 1024, shadowSize: 60,  density: 0.5, pixelRatio: 1.0 },
-  medium: { radius: 5, shadowMap: 2048, shadowSize: 80,  density: 0.8, pixelRatio: 1.5 },
-  high:   { radius: 7, shadowMap: 2048, shadowSize: 110, density: 1.0, pixelRatio: 2.0 }
+  low:    { radius: 4, shadowMap: 1024, shadowSize: 60,  density: 0.5, pixelRatio: 1.0, npcs: 8 },
+  medium: { radius: 5, shadowMap: 2048, shadowSize: 80,  density: 0.8, pixelRatio: 1.5, npcs: 14 },
+  high:   { radius: 7, shadowMap: 2048, shadowSize: 110, density: 1.0, pixelRatio: 2.0, npcs: 22 }
 };
 export const qualityPreset = (name) => QUALITY[name] || QUALITY.medium;
 

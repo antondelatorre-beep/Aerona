@@ -1,39 +1,17 @@
 # AERONA: The Living World
 
 A realistic multiplayer bird wildlife simulator for the browser (Three.js, Node.js, Socket.IO, PostgreSQL, Render).
+The project is one flat folder: no subfolders anywhere, so the zip can be uploaded as is.
 
 ## Status
 
 | Stage | Scope | State |
 |---|---|---|
-| 1 | Playable prototype: 3D world, GLB loading, one playable bird, procedural flight and walking, camera, desktop and mobile controls | done |
-| 2 | Species system: roster, per-species configs and bone mapping, species-specific movement, in-game switching | **this release** (code); each species gets its 3D model when you add the GLB |
-| 3 | Wildlife simulation: AI birds, feeding, flocking, predation, nesting | not started |
+| 1 | Playable prototype: 3D world, GLB loading, procedural flight and walking, camera, desktop and mobile controls | done |
+| 2 | Species system: per-species configs and bone mapping, species-specific movement, in-game switching | **this release**, 23 species with models |
+| 3 | Wildlife simulation: AI birds, feeding, flocking, predation, nesting | AI birds, flocks, hunger, foraging and hunting done (this release); nesting not started |
 | 4 | Multiplayer: Socket.IO, sync, chat, PostgreSQL persistence | not started (`server.js` is ready to host it) |
 | 5 | Full game: weather, breeding, progression, polish | not started |
-
-The project is one flat folder: no subfolders anywhere, so the zip can be uploaded as is.
-Files that arrive in later stages (same flat folder): `wildlife.js`, `ecosystem.js`, `multiplayer.js`, `menu.js`, `encyclopedia.js`, `wildlifeServer.js`, `database.js`.
-
-## Stage 2: species system
-
-* **41 species** in ``speciesData.js`` (the Philippine and worldwide lists, minus King Penguin, which cannot fly and needs swimming first). Each has its own size, wingspan, speeds, glide ratio, thrust, turn rate, stamina, diet, habitat, social and territorial flags, ecological role, nocturnal/diurnal activity, and wing-beat animation numbers. Groups are in `GROUPS` (all unlocked for now; unlock rules arrive with progression).
-* **Switch species in game** from the Tab/Esc menu. Position, heading and flight state carry over. Dashed buttons are species without a GLB yet: they fly with their real numbers using a stand-in body.
-* **Drop-in models**: put `<species_id>.glb` next to `main.js` (for example `peregrine_falcon.glb`). With no entry in `modelConfigs.js`, the game fits the scale to the species size, finds rigid wing/leg meshes and neck/tail bones by name, and prints the draft config in the browser console. Paste it into `modelConfigs.js` and refine it. The server lists installed models at `/api/models`.
-* Models that are already authored with wings spread out load with no wing rig (body bob only) until you map their wing bones with a `bones`-type config.
-
-### Models included in this build
-
-| Species id | File | Rig notes |
-|---|---|---|
-| `osprey` | `osprey.glb` | rigid folded wings, neck and tail bones |
-| `song_sparrow` | `song_sparrow.glb` | same recipe; wings are the `perchedBody.037/038` meshes |
-| `red_winged_blackbird` | `red_winged_blackbird.glb` | same recipe |
-| `european_robin` | `european_robin.glb` | rigid wings on a bone; neck and tail stay at rest pose (joint axes are not world-aligned) |
-| `american_coot` | `american_coot.glb` | wings are baked into the body, so flat feathered wing plates (`type: 'synthetic'`) are added for flight |
-
-`osprey_1.glb` was byte-identical to `osprey.glb`, so it was not added. The menu lists only species that have a model; use "Show species without a model" to reach the stand-in birds.
-All scales, `flightPitch` and wing `spread` values are first guesses from the model geometry; tune them in `modelConfigs.js`.
 
 ## Run locally
 
@@ -43,7 +21,7 @@ npm run dev        # or: npm start
 # open http://localhost:3000
 ```
 
-Useful URL options: `?species=peregrine_falcon`, `?quality=low|medium|high`, `?touch=1` (force touch controls).
+URL options: `?species=red_tailed_hawk`, `?quality=low|medium|high`, `?touch=1` (force touch controls).
 
 ## Controls
 
@@ -52,70 +30,58 @@ Mobile: left joystick, Flap, Glide, Boost, Dive, Land / Take off, Interact, drag
 
 Gliding is the default when you are not flapping. The bird is trimmed so a glide holds cruise speed and sinks at about 1/glide-ratio. Flap to climb, pitch down to trade height for speed, and stay above stall speed.
 
-## Where the Sketchfab models go
+## Species (only birds with a 3D model are included)
 
-Put `.glb` files next to `main.js` (the project is one flat folder). The Osprey is already there as `osprey.glb`.
-If a model fails to load, the game shows why and falls back to a procedural stand-in bird, so you can always test flight.
+Each species has its own size, wingspan, speeds, glide ratio, thrust, turn rate, stamina, diet, habitat, social and territorial flags, role and wing-beat numbers (`speciesData.js`). Switch species from the Tab/Esc menu; position, heading and flight state carry over.
 
-## Adding or configuring a bird
+| Species ids | Rig notes |
+|---|---|
+| `osprey`, `song_sparrow`, `red_winged_blackbird`, `red_tailed_hawk`, `american_robin`, `belted_kingfisher`, `purple_finch`, `swainsons_thrush`, `warbling_vireo`, `eastern_wood_pewee`, `western_wood_pewee`, `american_bittern`, `american_kestrel` | rigid folded wing and leg meshes (cut into left and right halves when one mesh holds both sides), neck and tail bones |
+| `european_robin` | rigid wings on a bone, FBX-style joints |
+| `american_coot`, `canada_goose`, `common_loon`, `pied_billed_grebe`, `wood_duck`, `ring_billed_gull` | no separate wing parts: flat feathered wing plates are added for flight (`type: 'synthetic'`); rigid feet where present |
+| `rock_pigeon`, `wild_turkey`, `ostrich` | full skeleton plus a long idle clip that plays on the ground. Pigeon and turkey get synthetic wings. The ostrich is flightless (Shift to run) |
 
-1. Download the GLB from Sketchfab and put it next to `main.js`.
-2. List its structure:
-   ```bash
-   npm run inspect-glb -- your_bird.glb
-   ```
-   The browser console also lists every node when the game loads the model.
-3. Add an entry to ``modelConfigs.js`` with the same `id` as the species in `speciesData.js`.
-   Names are matched ignoring case and punctuation (three.js strips "." from node names).
+Not added: the African Penguin and Ring-necked Pheasant uploads contained only FBX files. Export them as `.glb` and they can be added.
 
-Sample configuration (the working Osprey entry):
+All scales, `flightPitch` values and wing `spread` sizes are first guesses computed from the model geometry. Tune them in `modelConfigs.js`.
 
-```js
-osprey: {
-  path: '/osprey.glb',
-  scale: 1.25,              // model units to metres
-  forwardRotation: 0,       // yaw correction so the beak points along +Z
-  flightPitch: 0.75,        // model authored perched/upright: tilt this much in flight (0 for horizontal models)
-  fixMaterials: true,
-  shoulderDir: [0, 1, 1],   // which way the shoulder end of a wing mesh lies
-  wings: { type: 'rigid', nodes: ['perchedWings.004_0', 'perchedWings.013_2'],
-           spread: { length: 1.45, thickness: 0.35, chord: 2.1 } },
-  legs:  { type: 'rigid', nodes: ['perchedLegs.003_1', 'perchedLegs.009_3'] },
-  bones: { neck: ['Bone_6', 'Bone.001_5', 'Bone.002_4'], tail: ['Bone.003_8', 'Bone.004_7'] },
-  neck:  { straightenFrom: 1, yawBone: 1, pitchWeights: [0.25, 0.4, 0.35], yawWeights: [0, 1, 0] },
-  tail:  { pitchWeights: [0.6, 0.4], yawWeights: [0.6, 0.4] }
-}
-```
+## NPC birds
 
-Supported model types:
+Other species live in the world as AI birds (`wildlife.js`): 8, 14 or 22 of them depending on quality, kept within a few hundred metres of you. They use the same models, flight physics and animation as your bird. On the ground they idle, look around, peck and wander, and take off if you come close. In the air they fly between waypoints at heights that suit the species (soarers high, small dashers low), then land somewhere that fits their habitat (waterbirds on water, forest birds near forest). Flocking and colonial species spawn in groups of 3 to 5 and follow a leader. The ostrich only runs. NPCs are spawned in places that match their habitat, models download lazily (up to 10 species at a time), distant NPCs animate at a reduced rate, and NPCs far away are hidden and removed. The HUD shows the nearest bird's name.
+ Tune `count`, flee distances and altitudes in `wildlife.js`; inspect live with `aerona.wildlife`.
 
-* **Rigid wing meshes, no wing bones** (like the Osprey): wings are re-pivoted at the shoulder, unfolded outward by principal-axis analysis of their vertices, and stretched to flight span (`wings.spread`).
-* **Skinned wings**: `wings: { type: 'bones', left: [...], right: [...] }`, each segment `{ bone, flap: ['z', 1], fold: ['y', 1.2], twist: ['x', 0.5] }` (axis, weight or radians). Right-hand wings are mirrored unless `mirrorRight: false`.
-* **Neck and tail bones**: any chain length, with per-bone weights. Missing bones only log a warning.
-* **No usable skeleton**: the body bobs as a fallback. Existing animation clips are ignored (the game drives bones procedurally).
-* Draco and Meshopt compressed GLBs are supported.
+## Hunting and feeding
 
-Per-species motion lives in `speciesData.js` (`flight`, `ground`, `anim`). Flap frequency, amplitude, upstroke fold and sweep are all separate numbers.
+* **Predators** are the Osprey, Red-tailed Hawk and American Kestrel (`predation: { maxPreyMass }` in `speciesData.js`). They can take birds up to that mass.
+* **To hunt:** fly towards a bird. A red marker with its name and distance appears when it is within about 35 degrees of where you look and within 160 m. Within 30 m the prompt says "E: strike". Press **E**: talons come out for about a second, and if you get within reach the strike is rolled. Success depends on your speed, whether you are diving (hold **C**), how agile the prey is and whether it is on the ground. Birds heavier than your limit slip free.
+* **Eating:** a catch is carried in your talons. Land and press **E** four times to eat it; the food it gives depends on its mass compared with yours. Hunger drains slowly (faster while flapping); at zero your stamina recovers at half speed.
+* **Fishing:** piscivores (osprey, kingfishers, loons and others) can press **E** while skimming below 5 m over water, with about a 45 percent chance of a fish.
+* **Foraging:** any bird can peck the ground with **E** for a little food; seed and insect eaters get a useful amount, predators almost none.
+* **NPCs:** prey birds spot you (if you are a predator) and other hunters, then bolt, jink and dive. NPC osprey, hawks and kestrels stalk and stoop on NPC birds too, and then land to eat.
+* **Progress:** XP, level, kills, fish and meals are saved in the browser (`localStorage`). This is not secure; Stage 4 moves progression to the server.
+* Not yet: nesting, mating, carrion, thermals used by hunting AI beyond basic flight, and predators beyond these three species.
 
-Tuning from the browser console: `aerona.model.config`, `aerona.animator.a` (animation numbers, live), `aerona.species`.
+## Adding a bird
 
-## Known limits of Stage 1
+1. Put `<species_id>.glb` next to `main.js` (the Sketchfab GLB download works; Draco and Meshopt compression are supported).
+2. List its structure: `npm run inspect-glb -- your_bird.glb` (the browser console also lists every node on load).
+3. Add an entry to `speciesData.js` (flight and animation numbers) and `modelConfigs.js` (how to bind the model). Names are matched ignoring case and punctuation.
 
-* The bundled Osprey is a perched-pose model: wings are rigid slabs, so flight uses stretched folded-wing meshes. It works as a prototype; a spread-wing or fully rigged model will look much better. Tune `wings.spread` and `shoulderDir` if the wings look wrong.
-* The Osprey's `perchedBody` node is an empty group, so only the skinned body mesh is visible and bendable.
-* No collisions with trees or buildings yet, and no perching on branches (arrives with the ecosystem stage).
-* Not yet profiled on real mobile hardware. `?quality=low` is the default on touch devices.
+Config options: `scale`, `forwardRotation`, `flightPitch` (tilt for models authored perched/upright), `shoulderDir`, `wings` (`rigid`, `synthetic` or `bones`), `legs`, `bones` (neck and tail chains), `neck`/`tail` weights, `split`, `idleClip`. Neck and tail pitch/yaw act about the model's own axes, so any joint orientation works. If a GLB fails to load, the game falls back to a procedural stand-in bird and says why.
+
+Tuning from the browser console: `aerona.model.config`, `aerona.animator.a` (live animation numbers), `aerona.species`.
+
+## Known limits
+
+* Most models are perched-pose Sketchfab birds: wings are rigid slabs stretched and unfolded for flight, so they work as a prototype but will not look like a fully rigged bird.
+* The pigeon, turkey and ostrich legs do not walk (the clip is an idle); they glide over the ground.
+* No collisions with trees or buildings yet, and no perching on branches.
+* Not yet profiled on real mobile hardware; touch devices default to `?quality=low`.
 
 ## Deploy on Render
 
-Option A, blueprint (easiest): push this folder to GitHub, then in Render choose New, Blueprint and select the repo. `render.yaml` sets everything.
+Option A, blueprint: push this folder to GitHub, then in Render choose New, Blueprint and select the repo. `render.yaml` sets everything.
+Option B, manual: New, Web Service. Runtime Node, build command `npm install`, start command `npm start`, health check path `/healthz`, environment variable `NODE_VERSION=20`.
 
-Option B, manual: New, Web Service, connect the repo. Runtime Node, build command `npm install`, start command `npm start`, health check path `/healthz`, environment variable `NODE_VERSION=20`.
-
-Notes:
-* Render sets `PORT`; the server reads it and binds to `0.0.0.0`.
-* Commit your `.glb` files with the repo (the Osprey is 1.3 MB). Keep total model weight reasonable: free instances have limited bandwidth and slow cold starts after idling.
-* Responses are gzip-compressed, and three.js and models are cached by the browser.
-* Make sure the site is served over HTTPS (Render does this) so pointer lock works everywhere.
-
+Notes: Render sets `PORT`. Commit the `.glb` files with the repo (about 40 MB in total, the Ostrich is the largest). Responses are gzip-compressed. Free instances sleep when idle, so the first load after a gap is slow.
 From Stage 4: add a Render PostgreSQL instance and set `DATABASE_URL` and `SESSION_SECRET` as environment variables on the web service. Secrets never go into the browser files.

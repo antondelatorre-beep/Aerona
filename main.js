@@ -12,6 +12,8 @@ import { MobileControls, isTouchDevice } from './mobileControls.js';
 import { getSpecies, SPECIES, GROUPS } from './speciesData.js';
 import { getModelConfig } from './modelConfigs.js';
 import { Hud } from './hud.js';
+import { Wildlife } from './wildlife.js';
+import { Hunting } from './hunting.js';
 import { findSpawn } from '/terrain.js';
 
 const params = new URLSearchParams(location.search);
@@ -60,6 +62,7 @@ async function boot() {
   const mobile = touch ? new MobileControls(input) : null;
   const chase = new ChaseCamera(camera, species);
   let current = null;          // { species, model, flight, animator }
+  let hunting = null;
 
   async function useSpecies(id, onProgress) {
     const sp = getSpecies(id);
@@ -75,6 +78,7 @@ async function boot() {
     scene.add(model.root);
     current = { species: sp, model, flight, animator: new BirdAnimator(model, sp) };
     chase.setSpecies(sp);
+    hunting?.setBird(sp, model, flight);
     if (!window.aerona) window.aerona = {};
     Object.assign(window.aerona, { world, model, flight, animator: current.animator, species: sp, camera: chase });
     const url = new URL(location.href);
@@ -126,6 +130,12 @@ async function boot() {
   hud.hideLoading();
   setPlaying(false);
 
+  const wildlife = new Wildlife(scene, world, { count: preset.npcs });
+  hunting = new Hunting(wildlife);
+  hunting.setBird(current.species, current.model, current.flight);
+  Object.assign(window.aerona, { wildlife, hunting });
+  const ndc = new THREE.Vector3();
+
   const clock = new THREE.Clock();
   const euler = new THREE.Euler(0, 0, 0, 'YXZ');
   renderer.setAnimationLoop(() => {
@@ -136,8 +146,11 @@ async function boot() {
       chase.look(look.x, look.y);
       const inp = input.state();
       if (flight.mode !== 'ground') chase.yaw -= inp.moveX * 1.6 * dt;
-      flight.update(dt, inp, { yaw: chase.yaw, pitch: chase.pitch }, input.takeEdges());
+      const edges = input.takeEdges();
+      flight.update(dt, inp, { yaw: chase.yaw, pitch: chase.pitch }, edges);
+      hunting.update(dt, edges, { yaw: chase.yaw, pitch: chase.pitch });
     }
+    model.updateClip(dt, flight.mode === 'ground');
     animator.update(dt, flight.state);
     animator.apply();
     model.root.position.copy(flight.pos);
@@ -146,8 +159,13 @@ async function boot() {
     model.root.updateMatrixWorld(true);
 
     world.update(dt, flight.pos);
+    wildlife.update(dt, flight.pos, { predator: !!current.species.predation, active: flight.mode !== 'ground', species: current.species });
     chase.update(dt, flight.pos, flight.state.speed, world);
-    hud.update(dt, flight, world);
+    hud.update(dt, flight, world, wildlife, hunting);
+    if (hunting.target && playing) {
+      ndc.copy(hunting.target.pos).project(camera);
+      hud.setTarget(ndc.z < 1 ? { x: (ndc.x * 0.5 + 0.5) * window.innerWidth, y: (-ndc.y * 0.5 + 0.5) * window.innerHeight, label: `${hunting.target.npc.species.name}, ${Math.round(hunting.target.dist)} m` } : null);
+    } else hud.setTarget(null);
     renderer.render(scene, camera);
   });
 }
